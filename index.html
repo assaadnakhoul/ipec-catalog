@@ -5,25 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>IPEC Product Catalog — Quote Request</title>
 
-  <!-- Tailwind (quick). You can swap to a built CSS later for extra speed. -->
+  <!-- Tailwind for convenience -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Start fetching data ASAP from the Netlify Function -->
+  <!-- Make sure HTML isn't cached on stubborn mobile browsers -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+
+  <!-- Preload data -->
   <link rel="preload" href="/api/catalog" as="fetch" crossorigin>
 
   <style>
     :root{
-      /* Fallback; JS will overwrite this with the real header height */
-      --hdr-top: 60px;
-
       --ipec-blue:#1f3f77; --ipec-blue-2:#2c538f; --ipec-copper:#9a4f2a;
+      --hdr-top: 60px;     /* measured in JS */
+      --search-h: 56px;    /* measured in JS */
     }
+
     .brand-gradient{ background:linear-gradient(90deg, var(--ipec-blue), var(--ipec-blue-2)); }
     .accent-border{ box-shadow:0 0 0 3px rgba(154,79,42,0.15); border-color:var(--ipec-copper); }
-
     .btn{ background:var(--ipec-blue); color:#fff; border:none; border-radius:14px; font-weight:600; padding:.6rem 1rem; }
     .btn:disabled{ opacity:.5; cursor:not-allowed; }
-    .btn-pill{ background:var(--ipec-blue); color:#fff; border:none; border-radius:999px; font-weight:700; padding:.18rem .55rem; font-size:.72rem; line-height:1; white-space:nowrap; }
+    .btn-pill{ background:var(--ipec-blue); color:#fff; border:none; border-radius:999px; font-weight:700; padding:.18rem .6rem; font-size:.72rem; line-height:1; white-space:nowrap; }
 
     .thumb{ width:84px; height:84px; object-fit:contain; background:#f8fafc; border-radius:.75rem; border:1px solid rgba(31,63,119,.12); }
 
@@ -38,7 +42,7 @@
     .hdr-sub{ font-size:.72rem; opacity:.9; }
     .search-xl{ height:52px; font-size:16px; }
 
-    /* Freeze the search bar just under the header; make it narrower via max width */
+    /* Frozen search bar just under the header; narrower via max width */
     .sticky-search{
       position: sticky;
       top: calc(env(safe-area-inset-top, 0px) + var(--hdr-top));
@@ -47,7 +51,22 @@
       box-shadow: 0 1px 0 rgba(15,23,42,.05);
     }
 
-    /* Touch-friendly, tappable product image */
+    /* Category bar: sticky under the search bar, auto-hide on scroll down, show on scroll up */
+    .cat-sticky{
+      position: sticky;
+      top: calc(env(safe-area-inset-top, 0px) + var(--hdr-top) + var(--search-h));
+      z-index: 44;
+      background: #f8fafc;
+      transition: transform .22s ease, opacity .22s ease;
+      will-change: transform;
+    }
+    .cat-hide{
+      transform: translateY(-120%);
+      opacity: .0;
+      pointer-events: none;
+    }
+
+    /* Touch-friendly image link */
     .img-link{
       display:inline-block;
       line-height:0;
@@ -55,7 +74,7 @@
       -webkit-tap-highlight-color: transparent;
       cursor:pointer;
       position:relative;
-      z-index: 1; /* stay above surrounding elements */
+      z-index: 1;
     }
 
     @media (min-width:768px){
@@ -72,7 +91,7 @@
 </head>
 <body class="bg-slate-50 text-slate-800">
 
-  <!-- HEADER (sticky) -->
+  <!-- HEADER -->
   <header id="siteHeader" class="brand-gradient text-white sticky top-0 z-50">
     <div class="max-w-6xl mx-auto hdr-wrap flex items-center gap-3">
       <img src="/images/ipec-logo.png" alt="IPEC Logo" class="hdr-logo w-auto rounded bg-white/10 p-1" />
@@ -87,8 +106,8 @@
     </div>
   </header>
 
-  <!-- FROZEN SEARCH BAR (narrower: max-w-4xl) -->
-  <div class="sticky-search">
+  <!-- STICKY SEARCH (narrower with max-w-4xl) -->
+  <div id="searchSticky" class="sticky-search">
     <div class="max-w-4xl mx-auto px-3 md:px-4 py-2">
       <div class="grid grid-cols-[1fr_auto] gap-2 md:gap-3 items-center">
         <input id="searchBox"
@@ -99,12 +118,13 @@
     </div>
   </div>
 
+  <!-- CATEGORY BAR (sticky, hides on down / shows on up) -->
+  <div id="catSticky" class="cat-sticky">
+    <div id="catBar" class="max-w-6xl mx-auto px-3 md:px-4 cat-bar"></div>
+  </div>
+
   <main class="max-w-6xl mx-auto px-3 md:px-4 pt-2 md:pt-3 pb-6">
-    <!-- Stats + Categories -->
     <div id="stats" class="mt-1 text-xs md:text-sm text-slate-600 flex items-center gap-2"></div>
-    <div id="catBarWrap" class="mt-2 md:mt-3">
-      <div id="catBar" class="cat-bar"></div>
-    </div>
 
     <section id="emptyState" class="text-center text-slate-500 mt-6 md:mt-8">
       <p class="text-base md:text-lg">Loading catalog…</p>
@@ -157,11 +177,11 @@
   const $ = s => document.querySelector(s);
   const results = $("#results"), emptyState = $("#emptyState"), stats = $("#stats");
   const searchBox = $("#searchBox"), searchBtn = $("#searchBtn");
-  const catBar = $("#catBar");
+  const catBar = $("#catBar"), catSticky = $("#catSticky");
   const cartDrawer = $("#cartDrawer"), viewCartBtn = $("#viewCartBtn"), closeCartBtn = $("#closeCartBtn");
   const cartItems = $("#cartItems"), cartCount = $("#cartCount");
   const buyerName = $("#buyerName"), buyerNote = $("#buyerNote"), sendWhatsApp = $("#sendWhatsApp"), clearCart = $("#clearCart");
-  const siteHeader = $("#siteHeader");
+  const siteHeader = $("#siteHeader"), searchSticky = $("#searchSticky");
   $("#year").textContent = new Date().getFullYear();
 
   // ===== STATE =====
@@ -174,30 +194,21 @@
   const cart = new Map();
 
   // ===== HELPERS =====
-  function setStickyOffset(){
-    // Measure header height and update CSS var so iOS Safari handles sticky correctly
-    const h = siteHeader ? Math.round(siteHeader.getBoundingClientRect().height) : 60;
-    document.documentElement.style.setProperty("--hdr-top", h + "px");
-  }
-  window.addEventListener("load", setStickyOffset, { once:true });
-  window.addEventListener("resize", setStickyOffset);
-  window.addEventListener("orientationchange", setStickyOffset);
-  // iOS address-bar show/hide can break sticky; re-measure on scroll start
-  let resizeTick;
-  window.addEventListener("scroll", () => {
-    if (resizeTick) return;
-    resizeTick = requestAnimationFrame(()=>{ setStickyOffset(); resizeTick=null; });
-  }, { passive:true });
-
-  async function loadJSONCached(url, key, ttl){
-    try { const r = sessionStorage.getItem(key); if (r){ const o = JSON.parse(r); if (Date.now()-o.t < ttl) return o.v; } } catch {}
-    const v = await fetch(url).then(r=>r.json());
-    try { sessionStorage.setItem(key, JSON.stringify({t:Date.now(), v})); } catch {}
-    return v;
-  }
-  const nrm = s => (s||"").toString().normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+  function nrm(s){ return (s||"").toString().normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase(); }
   const stripEA = s => (s||"").toString().replace(/^\s*EA-\s*/i,"");
   const isSmallEquipment = s => nrm(s).includes("small equipment");
+
+  function setStickyOffsets(){
+    const hHdr = siteHeader? Math.round(siteHeader.getBoundingClientRect().height) : 60;
+    const hSrch = searchSticky? Math.round(searchSticky.getBoundingClientRect().height) : 56;
+    document.documentElement.style.setProperty("--hdr-top", hHdr + "px");
+    document.documentElement.style.setProperty("--search-h", hSrch + "px");
+  }
+  window.addEventListener("load", setStickyOffsets, { once:true });
+  window.addEventListener("resize", setStickyOffsets);
+  window.addEventListener("orientationchange", setStickyOffsets);
+  window.addEventListener("scroll", () => { setStickyOffsets(); }, { passive:true });
+
   function placeholder(){ return 'data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="84" height="84"><rect width="84" height="84" rx="12" fill="#f1f5f9"/></svg>'); }
   function fileFromManifest(code){
     const clean = nrm(stripEA(code)).trim();
@@ -227,7 +238,7 @@
     const rowTop = document.createElement("div");
     rowTop.className = "flex items-start gap-3";
 
-    // IMAGE — clickable to spec sheet; touch-friendly anchor
+    // Clickable image -> same spec sheet
     const imgEl = document.createElement("img");
     imgEl.className = "thumb md:w-[110px] md:h-[110px]";
     imgEl.alt = r.code;
@@ -239,7 +250,6 @@
       a.href = r.link; a.target = "_blank"; a.rel="noopener";
       a.className = "img-link";
       a.appendChild(imgEl);
-      // stop bubbling so buttons/text around don’t swallow the tap on iOS
       a.addEventListener("click", e => e.stopPropagation());
       leftNode = a;
     }
@@ -282,6 +292,25 @@
   }
 
   // ===== RENDER =====
+  function renderCategories(){
+    catBar.innerHTML = "";
+    const makeBtn = (label) => {
+      const b = document.createElement("button");
+      b.className = "cat-pill" + (label === selectedCategory ? " active" : "");
+      b.textContent = label;
+      b.onclick = () => { selectedCategory = label; doSearch(); highlightCats(); };
+      return b;
+    };
+    catBar.appendChild(makeBtn("All"));
+    categories.forEach(cat => catBar.appendChild(makeBtn(cat)));
+  }
+  function highlightCats(){
+    catBar.querySelectorAll(".cat-pill").forEach(b=>{
+      if (b.textContent === selectedCategory) b.classList.add("active");
+      else b.classList.remove("active");
+    });
+  }
+
   async function renderChunked(list){
     results.innerHTML=""; emptyState.innerHTML="";
     const isMobile = matchMedia("(max-width: 640px)").matches;
@@ -293,29 +322,6 @@
       results.appendChild(frag);
       await new Promise(r=>requestAnimationFrame(r));
     }
-  }
-
-  function renderCategories(){
-    catBar.innerHTML = "";
-    const allBtn = document.createElement("button");
-    allBtn.className = "cat-pill" + (selectedCategory === "All" ? " active" : "");
-    allBtn.textContent = "All";
-    allBtn.onclick = () => { selectedCategory = "All"; doSearch(); highlightCats(); };
-    catBar.appendChild(allBtn);
-
-    categories.forEach(cat => {
-      const b = document.createElement("button");
-      b.className = "cat-pill" + (cat === selectedCategory ? " active" : "");
-      b.textContent = cat;
-      b.onclick = () => { selectedCategory = cat; doSearch(); highlightCats(); };
-      catBar.appendChild(b);
-    });
-  }
-  function highlightCats(){
-    catBar.querySelectorAll(".cat-pill").forEach(b=>{
-      if (b.textContent === selectedCategory) b.classList.add("active");
-      else b.classList.remove("active");
-    });
   }
 
   function doSearch(){
@@ -334,7 +340,6 @@
   }
 
   // ===== CART =====
-  function updateCartBadge(){ let t=0; cart.forEach(i=>t+=i.qty); cartCount.textContent=t; renderCart(); }
   function renderCart(){
     cartItems.innerHTML="";
     if(!cart.size){ cartItems.innerHTML=`<p class="text-slate-500">Your cart is empty.</p>`; return; }
@@ -357,14 +362,24 @@
       ctl.append(m,q,p,rm); row.append(img,info,ctl); cartItems.appendChild(row);
     }
   }
+  function updateCartBadge(){ let t=0; cart.forEach(i=>t+=i.qty); cartCount.textContent=t; renderCart(); }
 
-  // ===== BOOT =====
+  // ===== DATA LOAD =====
+  async function loadJSONCached(url, key, ttl){
+    try { const r = sessionStorage.getItem(key); if (r){ const o = JSON.parse(r); if (Date.now()-o.t < ttl) return o.v; } } catch {}
+    const v = await fetch(url).then(r=>r.json());
+    try { sessionStorage.setItem(key, JSON.stringify({t:Date.now(), v})); } catch {}
+    return v;
+  }
+
   (async () => {
     try {
-      [manifest, flyerOrder] = await Promise.all([
+      const [mani, order] = await Promise.all([
         loadJSONCached(MANIFEST_URL, "ipec_manifest", 24*60*60*1000).catch(()=> ({})),
         loadJSONCached(ORDER_URL,    "ipec_order",    24*60*60*1000).catch(()=> [])
       ]);
+      manifest = mani; flyerOrder = order;
+
       const data = await loadJSONCached(CSV_URL, "ipec_catalog", 15*60*1000);
 
       rows = (data||[])
@@ -380,6 +395,7 @@
           subKey: nrm(d.sub||"")
         }));
 
+      // Categories in fixed order, using real names from sheet
       const byNorm = new Map();
       rows.forEach(r => { if (r.cat){ const k=nrm(r.cat); if(!byNorm.has(k)) byNorm.set(k, r.cat); } });
       categories = CATEGORY_ORDER.map(name => byNorm.get(nrm(name))).filter(Boolean);
@@ -395,7 +411,7 @@
       await renderChunked(currentList);
       emptyState.innerHTML = `<p class="text-base md:text-lg">Type a code or a word from the description…</p>`;
 
-      // Warm cache again
+      // warm cache again
       fetch(CSV_URL).then(r=>r.json()).then(j=>{ try{ sessionStorage.setItem("ipec_catalog", JSON.stringify({t:Date.now(), v:j})); }catch{} });
     } catch(e){
       console.error(e);
@@ -403,7 +419,7 @@
     }
   })();
 
-  // EVENTS
+  // ===== EVENTS =====
   viewCartBtn.addEventListener("click", ()=>{ cartDrawer.style.transform="translateX(0)"; });
   closeCartBtn.addEventListener("click", ()=>{ cartDrawer.style.transform="translateX(100%)"; });
   sendWhatsApp.addEventListener("click", ()=> {
@@ -418,7 +434,20 @@
   searchBtn.addEventListener("click", doSearch);
   searchBox.addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
 
-  function updateCartBadge(){ let t=0; cart.forEach(i=>t+=i.qty); cartCount.textContent=t; renderCart(); }
+  // ===== SMART SHOW/HIDE FOR CATEGORY BAR =====
+  let lastY = window.scrollY;
+  const TH = 8; // small threshold in px to avoid flicker
+  function onSmartScroll(){
+    const y = window.scrollY || 0;
+    if (y > lastY + TH) {               // scrolling down -> hide
+      catSticky.classList.add("cat-hide");
+    } else if (y < lastY - TH) {        // scrolling up a bit -> show immediately
+      catSticky.classList.remove("cat-hide");
+    }
+    lastY = y;
+  }
+  // Start hidden once you scroll past the category bar initial position
+  window.addEventListener("scroll", onSmartScroll, { passive:true });
 })();
 </script>
 </body>
