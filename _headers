@@ -1,3 +1,12 @@
+/index.html
+  Cache-Control: max-age=0, no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
+# also protect the bare "/" route
+/
+  Cache-Control: max-age=0, no-cache, no-store, must-revalidate
+
 /images/*
   Cache-Control: public, max-age=31536000, immutable
 
