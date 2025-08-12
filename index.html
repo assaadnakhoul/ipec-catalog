@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IPEC Product Catalog — Quote Request</title>
+
+  <!-- Tailwind (quick start). Later you can swap to a built CSS file for even faster loads. -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Start fetching data ASAP from your Netlify Function -->
+  <link rel="preload" href="/api/catalog" as="fetch" crossorigin>
+
+  <style>
+    :root { --ipec-blue:#1f3f77; --ipec-blue-2:#2c538f; --ipec-copper:#9a4f2a; }
+    .brand-gradient { background: linear-gradient(90deg, var(--ipec-blue), var(--ipec-blue-2)); }
+    .accent-border { box-shadow: 0 0 0 3px rgba(154,79,42,0.15); border-color: var(--ipec-copper); }
+
+    .btn { background:var(--ipec-blue); color:#fff; border:none; border-radius:14px; font-weight:600; padding:.6rem 1rem; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .btn-pill { background:var(--ipec-blue); color:#fff; border:none; border-radius:999px; font-weight:700; padding:.18rem .55rem; font-size:.72rem; line-height:1; white-space:nowrap; }
+    .thumb { width:84px; height:84px; object-fit:contain; background:#f8fafc; border-radius:.75rem; border:1px solid rgba(31,63,119,.12); }
+
+    /* Category chips */
+    .cat-pill {
+      padding: .36rem .7rem;
+      border-radius: 999px;
+      border: 1px solid rgba(31,63,119,.18);
+      background: #fff;
+      font-size: .82rem;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+    .cat-pill.active {
+      background: var(--ipec-blue);
+      color: #fff;
+      border-color: var(--ipec-blue);
+    }
+    .cat-bar {
+      display: flex; gap: .5rem; align-items: center;
+      overflow-x: auto; padding: .5rem .25rem;
+      scrollbar-width: thin;
+    }
+
+    /* Header (mobile-first) */
+    .hdr-wrap{ padding:.45rem .75rem; }
+    .hdr-logo{ height:28px; }
+    .hdr-title{ font-size:1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .hdr-sub{ font-size:.72rem; opacity:.9; }
+    .search-xl { height:52px; font-size:16px; }
+
+    @media (min-width: 768px){
+      .hdr-wrap{ padding:1.1rem 1rem; }
+      .hdr-logo{ height:48px; }
+      .hdr-title{ font-size:1.6rem; }
+      .hdr-sub{ font-size:.9rem; }
+      .thumb { width:110px; height:110px; }
+      .search-xl { height:60px; font-size:17px; }
+      .btn { padding:.7rem 1.1rem; }
+      .btn-pill { font-size:.75rem; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+  <!-- HEADER -->
+  <header class="brand-gradient text-white sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto hdr-wrap flex items-center gap-3">
+      <img src="/images/ipec-logo.png" alt="IPEC Logo" class="hdr-logo w-auto rounded bg-white/10 p-1" />
+      <div class="min-w-0">
+        <h1 class="hdr-title font-semibold tracking-tight">IPEC Product Catalog</h1>
+        <p class="hdr-sub">Browse items, add to cart, and send a WhatsApp quote request</p>
+      </div>
+      <button id="viewCartBtn" class="ml-auto btn flex items-center gap-2">
+        <span>Cart</span>
+        <span id="cartCount" class="inline-flex items-center justify-center w-6 h-6 text-sm rounded-full bg-white text-[var(--ipec-blue)] font-semibold">0</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-3 md:px-4 py-4 md:py-6">
+    <!-- SEARCH -->
+    <section class="sticky top-[56px] md:top-[88px] bg-slate-50 pb-3 md:pb-4 z-40">
+      <div class="grid grid-cols-[1fr_auto] gap-2 md:gap-3 items-center">
+        <input id="searchBox" class="w-full rounded-2xl border-2 accent-border px-4 md:px-5 search-xl outline-none focus:ring-4 focus:ring-[var(--ipec-blue)]/20 focus:border-[var(--ipec-blue)]"
+               placeholder="Type a code or any word from the description…" />
+        <button id="searchBtn" class="btn">Search</button>
+      </div>
+
+      <div id="stats" class="mt-2 text-xs md:text-sm text-slate-600 flex items-center gap-2"></div>
+
+      <!-- CATEGORY BAR -->
+      <div id="catBarWrap" class="mt-2 md:mt-3">
+        <div id="catBar" class="cat-bar"></div>
+      </div>
+    </section>
+
+    <section id="emptyState" class="text-center text-slate-500 mt-8 md:mt-12">
+      <p class="text-base md:text-lg">Loading catalog…</p>
+    </section>
+
+    <!-- RESULTS -->
+    <section id="results" class="grid gap-2.5 md:gap-3"></section>
+  </main>
+
+  <!-- CART DRAWER -->
+  <aside id="cartDrawer" class="fixed top-0 right-0 w-full max-w-md h-full bg-white shadow-2xl border-l border-slate-200 translate-x-full transition-transform duration-300 z-50 flex flex-col">
+    <div class="p-4 border-b border-slate-200 flex items-center">
+      <h2 class="text-lg font-semibold">Your Cart</h2>
+      <button id="closeCartBtn" class="ml-auto text-slate-500 hover:text-slate-700">Close</button>
+    </div>
+    <div id="cartItems" class="p-4 flex-1 overflow-auto space-y-3"></div>
+    <div class="p-4 border-t border-slate-200 space-y-3">
+      <input id="buyerName" class="w-full rounded-lg border px-3 py-2" placeholder="Your name / company (optional)" />
+      <textarea id="buyerNote" class="w-full rounded-lg border px-3 py-2" placeholder="Notes (optional)" rows="2"></textarea>
+      <button id="sendWhatsApp" class="btn w-full">Send quote request via WhatsApp</button>
+      <button id="clearCart" class="w-full rounded-lg border px-3 py-2 text-slate-700">Clear cart</button>
+    </div>
+  </aside>
+
+  <footer class="mt-10 md:mt-12 py-6 text-center text-slate-500 text-sm">
+    <p>© <span id="year"></span> IPEC — Product Catalog</p>
+  </footer>
+
+<script>
+(() => {
+  // ===== CONFIG =====
+  // Fast endpoint served by your Netlify Function (catalog.js)
+  const CSV_URL  = "/api/catalog";
+
+  const MANIFEST_URL = "/assets/manifest.json";     // code -> filename
+  const ORDER_URL    = "/assets/flyer-order.json";  // optional fixed order for "All"
+  const IMG_BASE     = "/images/";
+  const WHATSAPP_NUMBER = "96170389000";
+
+  // Fixed category order (case-insensitive). Only existing categories will show.
+  const CATEGORY_ORDER = [
+    "refrigeration equipment",
+    "hot equipment",
+    "preparation equipment",
+    "stainless steel equipment",
+    "shelving units",
+    "fun food",
+    "faucets",
+    "spare parts",
+    "ipec fabrication"
+  ];
+
+  // ===== DOM =====
+  const $ = s => document.querySelector(s);
+  const results = $("#results"), emptyState = $("#emptyState"), stats = $("#stats");
+  const searchBox = $("#searchBox"), searchBtn = $("#searchBtn");
+  const catBar = $("#catBar");
+  const cartDrawer = $("#cartDrawer"), viewCartBtn = $("#viewCartBtn"), closeCartBtn = $("#closeCartBtn");
+  const cartItems = $("#cartItems"), cartCount = $("#cartCount");
+  const buyerName = $("#buyerName"), buyerNote = $("#buyerNote"), sendWhatsApp = $("#sendWhatsApp"), clearCart = $("#clearCart");
+  $("#year").textContent = new Date().getFullYear();
+
+  // ===== STATE =====
+  let manifest = {};
+  let flyerOrder = [];
+  let rows = [];           // all items
+  let currentList = [];    // visible list
+  let categories = [];     // ordered list
+  let selectedCategory = "All"; // default
+  const cart = new Map();
+
+  // ===== CACHE HELPERS =====
+  async function loadJSONCached(url, key, ttl){
+    try { const r = sessionStorage.getItem(key); if (r){ const o = JSON.parse(r); if (Date.now()-o.t < ttl) return o.v; } } catch {}
+    const v = await fetch(url).then(r=>r.json());
+    try { sessionStorage.setItem(key, JSON.stringify({t:Date.now(), v})); } catch {}
+    return v;
+  }
+
+  // ===== UTIL =====
+  const nrm = s => (s||"").toString().normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+  const stripEA = s => (s||"").toString().replace(/^\s*EA-\s*/i,"");
+  const isSmallEquipment = s => nrm(s).includes("small equipment");
+  function placeholder(){ return 'data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="84" height="84"><rect width="84" height="84" rx="12" fill="#f1f5f9"/></svg>'); }
+  function fileFromManifest(code){
+    const clean = nrm(stripEA(code)).trim();
+    const compact = clean.replace(/[^a-z0-9]/g,'');
+    return manifest[clean] || manifest[compact] || null;
+  }
+  function assignImage(img, code){ const f=fileFromManifest(code); img.src=f?(IMG_BASE+f):placeholder(); img.loading="lazy"; img.decoding="async"; }
+
+  // ===== ORDERING =====
+  function orderBySubcategory(list){
+    return list.slice().sort((a,b) => {
+      const as = a.subKey || "zzz", bs = b.subKey || "zzz";
+      if (as !== bs) return as.localeCompare(bs);
+      return a.code.localeCompare(b.code);
+    });
+  }
+  function orderByFlyer(list){
+    if (!flyerOrder.length) return list;
+    const idx = new Map(flyerOrder.map((c,i)=>[nrm(stripEA(c)), i]));
+    return list.slice().sort((a,b) => (idx.get(nrm(stripEA(a.code))) ?? 1e9) - (idx.get(nrm(stripEA(b.code))) ?? 1e9));
+  }
+
+  // ===== RENDER =====
+  function buildCard(r){
+    const card = document.createElement("div");
+    card.className = "bg-white rounded-2xl p-3 shadow-sm border border-slate-200";
+
+    const rowTop = document.createElement("div");
+    rowTop.className = "flex items-start gap-3";
+
+    const img = document.createElement("img");
+    img.className = "thumb md:w-[110px] md:h-[110px]";
+    img.alt = r.code; assignImage(img, r.code);
+
+    const textCol = document.createElement("div"); textCol.className="min-w-0 flex-1";
+    const line = document.createElement("div"); line.className="flex items-center gap-2 flex-wrap";
+    const code = document.createElement("div"); code.className="font-mono font-semibold text-slate-800 text-sm md:text-base"; code.textContent=r.code;
+    line.appendChild(code);
+    if (r.link){
+      const chip = document.createElement("a");
+      chip.href=r.link; chip.target="_blank"; chip.rel="noopener";
+      chip.className="btn-pill"; chip.textContent="Specification sheet";
+      line.appendChild(chip);
+    }
+    const desc = document.createElement("div"); desc.className="text-slate-700 mt-1 text-[13.5px] leading-[1.3] md:text-[15px] md:leading-[1.45]";
+    desc.textContent = r.desc || "";
+
+    textCol.append(line, desc);
+    rowTop.append(img, textCol);
+
+    const controls = document.createElement("div");
+    controls.className = "mt-2 flex justify-end items-center gap-2";
+    const minus = Object.assign(document.createElement("button"), {textContent:"−"}); minus.className="w-9 h-9 rounded-lg border";
+    const qty = document.createElement("input"); qty.type="number"; qty.min="1"; qty.value="1"; qty.className="w-16 text-center rounded-lg border py-2";
+    const plus = Object.assign(document.createElement("button"), {textContent:"+"}); plus.className="w-9 h-9 rounded-lg border";
+    const add  = Object.assign(document.createElement("button"), {textContent:"Add"}); add.className="btn rounded-xl";
+
+    minus.onclick = () => { const v = Math.max(1,(+qty.value||1)-1); qty.value=v; };
+    plus.onclick  = () => { qty.value = (+qty.value||1)+1; };
+    add.onclick   = () => {
+      const q = Math.max(1, +qty.value||1);
+      const key = r.code;
+      const cur = cart.get(key) || { code:r.code, desc:r.desc, link:r.link, qty:0 };
+      cur.qty += q; cart.set(key, cur); updateCartBadge();
+    };
+
+    controls.append(minus, qty, plus, add);
+    card.append(rowTop, controls);
+    return card;
+  }
+
+  async function renderChunked(list){
+    results.innerHTML=""; emptyState.innerHTML="";
+    const isMobile = matchMedia("(max-width: 640px)").matches;
+    const BATCH = isMobile ? 12 : 24;
+    let i=0;
+    while(i<list.length){
+      const frag=document.createDocumentFragment();
+      for(let j=0;j<BATCH && i<list.length; j++,i++) frag.appendChild(buildCard(list[i]));
+      results.appendChild(frag);
+      await new Promise(r=>requestAnimationFrame(r));
+    }
+  }
+
+  function renderCategories(){
+    catBar.innerHTML = "";
+    // "All" first
+    const allBtn = document.createElement("button");
+    allBtn.className = "cat-pill" + (selectedCategory === "All" ? " active" : "");
+    allBtn.textContent = "All";
+    allBtn.onclick = () => { selectedCategory = "All"; doSearch(); highlightCats(); };
+    catBar.appendChild(allBtn);
+
+    categories.forEach(cat => {
+      const b = document.createElement("button");
+      b.className = "cat-pill" + (cat === selectedCategory ? " active" : "");
+      b.textContent = cat;
+      b.onclick = () => { selectedCategory = cat; doSearch(); highlightCats(); };
+      catBar.appendChild(b);
+    });
+  }
+  function highlightCats(){
+    catBar.querySelectorAll(".cat-pill").forEach(b=>{
+      if (b.textContent === selectedCategory) b.classList.add("active");
+      else b.classList.remove("active");
+    });
+  }
+
+  function doSearch(){
+    const q = nrm(stripEA((searchBox.value||"").trim()));
+    let list = rows.filter(r => {
+      const okQ = !q || r.codeKey.includes(q) || q.split(/\s+/).filter(Boolean).every(t => r.descriptionKey.includes(t));
+      const okC = selectedCategory === "All" || r.cat === selectedCategory;
+      return okQ && okC;
+    });
+
+    if (selectedCategory !== "All") list = orderBySubcategory(list);
+    else list = orderByFlyer(list);
+
+    currentList = list;
+    stats.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">${rows.length} items</span>`;
+    renderChunked(currentList);
+  }
+
+  // ===== CART =====
+  function updateCartBadge(){ let t=0; cart.forEach(i=>t+=i.qty); cartCount.textContent=t; renderCart(); }
+  function renderCart(){
+    cartItems.innerHTML="";
+    if(!cart.size){ cartItems.innerHTML=`<p class="text-slate-500">Your cart is empty.</p>`; return; }
+    for(const item of cart.values()){
+      const row=document.createElement("div"); row.className="border rounded-xl p-3 flex items-start gap-3";
+      const img=document.createElement("img"); img.className="w-16 h-16 object-contain bg-slate-50 rounded"; assignImage(img,item.code);
+      const info=document.createElement("div"); info.className="min-w-0 flex-1";
+      info.innerHTML=`<div class="font-mono font-semibold">${item.code}</div>
+        <div class="text-sm text-slate-600 truncate">${item.desc||""}</div>
+        ${item.link?`<a class="text-sm text-[var(--ipec-blue-2)] underline" href="${item.link}" target="_blank" rel="noopener">Specification sheet</a>`:""}`;
+      const ctl=document.createElement("div"); ctl.className="flex items-center gap-2";
+      const m=Object.assign(document.createElement("button"),{textContent:"−"}); m.className="w-8 h-8 rounded border";
+      const q=document.createElement("input"); q.type="number"; q.min="1"; q.value=item.qty; q.className="w-14 text-center rounded border py-1";
+      const p=Object.assign(document.createElement("button"),{textContent:"+"}); p.className="w-8 h-8 rounded border";
+      const rm=Object.assign(document.createElement("button"),{textContent:"Remove"}); rm.className="text-sm text-red-600";
+      m.onclick=()=>{ item.qty=Math.max(1,(+q.value||1)-1); q.value=item.qty; updateCartBadge(); };
+      p.onclick=()=>{ item.qty=(+q.value||1)+1; q.value=item.qty; updateCartBadge(); };
+      q.onchange=()=>{ item.qty=Math.max(1,(+q.value||1)); updateCartBadge(); };
+      rm.onclick=()=>{ cart.delete(item.code); updateCartBadge(); };
+      ctl.append(m,q,p,rm); row.append(img,info,ctl); cartItems.appendChild(row);
+    }
+  }
+
+  // ===== BOOT =====
+  (async () => {
+    try {
+      // Load manifest and optional flyer order
+      [manifest, flyerOrder] = await Promise.all([
+        loadJSONCached(MANIFEST_URL, "ipec_manifest", 24*60*60*1000).catch(()=> ({})),
+        loadJSONCached(ORDER_URL,    "ipec_order",    24*60*60*1000).catch(()=> [])
+      ]);
+
+      // Load catalog JSON from Netlify function
+      const data = await loadJSONCached(CSV_URL, "ipec_catalog", 15*60*1000);
+
+      // Build rows (hide "Small Equipment")
+      rows = (data||[])
+        .filter(d => d && d.code && !isSmallEquipment(d.cat||""))
+        .map(d => ({
+          code: d.code,
+          desc: d.desc || "",
+          link: d.link || null,
+          cat:  (d.cat || "").trim(),
+          sub:  d.sub || "",
+          codeKey: nrm(stripEA(d.code||"")),
+          descriptionKey: nrm(d.desc||""),
+          subKey: nrm(d.sub||"")
+        }));
+
+      // Categories in your fixed order (only ones that exist)
+      const byNorm = new Map(); // norm -> original label
+      rows.forEach(r => { if (r.cat) { const k=nrm(r.cat); if (!byNorm.has(k)) byNorm.set(k, r.cat); } });
+      categories = CATEGORY_ORDER.map(name => byNorm.get(nrm(name))).filter(Boolean);
+
+      renderCategories();
+
+      // Default list (All): flyer order if provided, else natural
+      currentList = flyerOrder.length ? (function(){
+        const idx = new Map(flyerOrder.map((c,i)=>[nrm(stripEA(c)), i]));
+        return rows.slice().sort((a,b)=>(idx.get(nrm(stripEA(a.code))) ?? 1e9)-(idx.get(nrm(stripEA(b.code))) ?? 1e9));
+      })() : rows.slice();
+
+      stats.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">${rows.length} items</span>`;
+      await renderChunked(currentList);
+      emptyState.innerHTML = `<p class="text-base md:text-lg">Type a code or a word from the description…</p>`;
+
+      // Warm the cache again in background
+      fetch(CSV_URL).then(r=>r.json()).then(j=>{ try{ sessionStorage.setItem("ipec_catalog", JSON.stringify({t:Date.now(), v:j})); }catch{} });
+    } catch(e){
+      console.error(e);
+      emptyState.innerHTML = `<p class="text-base md:text-lg text-red-600">Failed to load catalog: ${e.message}</p>`;
+    }
+  })();
+
+  // EVENTS
+  viewCartBtn.addEventListener("click", ()=>{ cartDrawer.style.transform="translateX(0)"; });
+  closeCartBtn.addEventListener("click", ()=>{ cartDrawer.style.transform="translateX(100%)"; });
+  sendWhatsApp.addEventListener("click", ()=> {
+    if(!cart.size){ cartDrawer.style.transform="translateX(0)"; return; }
+    const items = Array.from(cart.values()).map(i=>`• ${i.code} — qty ${i.qty}`).join("%0A");
+    const name  = buyerName.value ? `%0AName: ${encodeURIComponent(buyerName.value)}` : "";
+    const note  = buyerNote.value ? `%0ANote: ${encodeURIComponent(buyerNote.value)}` : "";
+    const text  = `Hello IPEC,%0AI'd like a quote for:%0A${items}${name}${note}`;
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${text}`, "_blank");
+  });
+  clearCart.addEventListener("click", ()=>{ cart.clear(); updateCartBadge(); });
+  searchBtn.addEventListener("click", doSearch);
+  searchBox.addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+
+  function updateCartBadge(){ let t=0; cart.forEach(i=>t+=i.qty); cartCount.textContent=t; renderCart(); }
+})();
+</script>
+</body>
+</html>
