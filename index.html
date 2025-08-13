@@ -1,454 +1,301 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>IPEC Product Catalog — Quote Request</title>
-
-  <!-- Tailwind for convenience -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Make sure HTML isn't cached on stubborn mobile browsers -->
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
-
-  <!-- Preload data -->
-  <link rel="preload" href="/api/catalog" as="fetch" crossorigin>
-
+  <title>IPEC Catalog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
   <style>
-    :root{
-      --ipec-blue:#1f3f77; --ipec-blue-2:#2c538f; --ipec-copper:#9a4f2a;
-      --hdr-top: 60px;     /* measured in JS */
-      --search-h: 56px;    /* measured in JS */
+    :root {
+      --bg: #fafafa;
+      --card: #fff;
+      --text: #111;
+      --muted: #6b7280;
+      --accent: #0ea5e9;
+      --bar-h: 56px;
+      --radius: 14px;
+      --gap: 14px;
+      --shadow: 0 6px 20px rgba(0,0,0,.06);
+      --ring: 0 0 0 2px rgba(14,165,233,.25);
     }
 
-    .brand-gradient{ background:linear-gradient(90deg, var(--ipec-blue), var(--ipec-blue-2)); }
-    .accent-border{ box-shadow:0 0 0 3px rgba(154,79,42,0.15); border-color:var(--ipec-copper); }
-    .btn{ background:var(--ipec-blue); color:#fff; border:none; border-radius:14px; font-weight:600; padding:.6rem 1rem; }
-    .btn:disabled{ opacity:.5; cursor:not-allowed; }
-    .btn-pill{ background:var(--ipec-blue); color:#fff; border:none; border-radius:999px; font-weight:700; padding:.18rem .6rem; font-size:.72rem; line-height:1; white-space:nowrap; }
-
-    .thumb{ width:84px; height:84px; object-fit:contain; background:#f8fafc; border-radius:.75rem; border:1px solid rgba(31,63,119,.12); }
-
-    .cat-pill{ padding:.36rem .7rem; border-radius:999px; border:1px solid rgba(31,63,119,.18); background:#fff; font-size:.82rem; color:#0f172a; white-space:nowrap; }
-    .cat-pill.active{ background:var(--ipec-blue); color:#fff; border-color:var(--ipec-blue); }
-    .cat-bar{ display:flex; gap:.5rem; align-items:center; overflow-x:auto; padding:.5rem .25rem; scrollbar-width:thin; }
-
-    /* Header (mobile-first) */
-    .hdr-wrap{ padding:.45rem .75rem; }
-    .hdr-logo{ height:28px; }
-    .hdr-title{ font-size:1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .hdr-sub{ font-size:.72rem; opacity:.9; }
-    .search-xl{ height:52px; font-size:16px; }
-
-    /* Frozen search bar just under the header; narrower via max width */
-    .sticky-search{
-      position: sticky;
-      top: calc(env(safe-area-inset-top, 0px) + var(--hdr-top));
-      z-index: 45;
-      background: #f8fafc;
-      box-shadow: 0 1px 0 rgba(15,23,42,.05);
-    }
-
-    /* Category bar: sticky under the search bar, auto-hide on scroll down, show on scroll up */
-    .cat-sticky{
-      position: sticky;
-      top: calc(env(safe-area-inset-top, 0px) + var(--hdr-top) + var(--search-h));
-      z-index: 44;
-      background: #f8fafc;
-      transition: transform .22s ease, opacity .22s ease;
-      will-change: transform;
-    }
-    .cat-hide{
-      transform: translateY(-120%);
-      opacity: .0;
-      pointer-events: none;
-    }
-
-    /* Touch-friendly image link */
-    .img-link{
-      display:inline-block;
-      line-height:0;
-      touch-action:manipulation;
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
       -webkit-tap-highlight-color: transparent;
-      cursor:pointer;
-      position:relative;
-      z-index: 1;
+      /* Leave room for sticky bar on older iOS while it animates */
+      padding-top: 0;
     }
 
-    @media (min-width:768px){
-      .hdr-wrap{ padding:1.1rem 1rem; }
-      .hdr-logo{ height:48px; }
-      .hdr-title{ font-size:1.6rem; }
-      .hdr-sub{ font-size:.9rem; }
-      .thumb{ width:110px; height:110px; }
-      .search-xl{ height:60px; font-size:17px; }
-      .btn{ padding:.7rem 1.1rem; }
-      .btn-pill{ font-size:.75rem; }
+    /* CATEGORY BAR */
+    .category-bar-wrap {
+      position: sticky; /* better with iOS URL bar than fixed */
+      top: 0;
+      z-index: 1000;
     }
+    .category-bar {
+      height: var(--bar-h);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      background: #fff;
+      border-bottom: 1px solid rgba(0,0,0,.06);
+      transform: translateY(0);
+      transition: transform .22s ease;
+      will-change: transform;
+      contain: layout paint;
+      /* For iOS notch devices */
+      padding-top: calc(env(safe-area-inset-top, 0px));
+    }
+    .category-bar.is-hidden { transform: translateY(calc(-100% - env(safe-area-inset-top, 0px))); }
+
+    .cat-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #f1f5f9;
+      color: #0f172a;
+      text-decoration: none;
+      font-weight: 600;
+      white-space: nowrap;
+      touch-action: manipulation;
+      border: 1px solid rgba(0,0,0,.05);
+    }
+    .cat-chip:focus-visible { outline: none; box-shadow: var(--ring); }
+    .cat-chip.active { background: #e0f2fe; color: #075985; border-color: rgba(14,165,233,.35); }
+
+    /* LAYOUT */
+    main { padding: 16px; }
+    .grid {
+      display: grid;
+      gap: var(--gap);
+      grid-template-columns: repeat(1, minmax(0, 1fr));
+    }
+    @media (min-width: 540px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (min-width: 900px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (min-width: 1200px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+    /* CARD */
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      border: 1px solid rgba(0,0,0,.05);
+      display: flex;
+      flex-direction: column;
+    }
+    .thumb {
+      display: block; /* ensure whole image is a tap target */
+      width: 100%;
+      aspect-ratio: 4/3;
+      background: #f3f4f6;
+      position: relative;
+      overflow: hidden;
+      touch-action: manipulation;
+    }
+    .thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain; /* avoids accidental overlays */
+      display: block;
+      pointer-events: auto;
+    }
+    .meta {
+      padding: 12px 12px 14px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 8px;
+    }
+    .title {
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(0,0,0,.08);
+      background: #fff;
+      text-decoration: none;
+      color: #0f172a;
+      font-weight: 600;
+      gap: 8px;
+      touch-action: manipulation;
+    }
+    .btn:focus-visible { outline: none; box-shadow: var(--ring); }
+    .btn.primary { background: #0ea5e9; color: white; border-color: #0ea5e9; }
+
+    /* Ensure no invisible overlay blocks taps */
+    .card, .card *, .category-bar, .category-bar * { pointer-events: auto; }
+
+    /* Make anchor targets nicely big on mobile */
+    a { -webkit-touch-callout: none; touch-action: manipulation; }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-800">
+<body>
 
-  <!-- HEADER -->
-  <header id="siteHeader" class="brand-gradient text-white sticky top-0 z-50">
-    <div class="max-w-6xl mx-auto hdr-wrap flex items-center gap-3">
-      <img src="/images/ipec-logo.png" alt="IPEC Logo" class="hdr-logo w-auto rounded bg-white/10 p-1" />
-      <div class="min-w-0">
-        <h1 class="hdr-title font-semibold tracking-tight">IPEC Product Catalog</h1>
-        <p class="hdr-sub">Browse items, add to cart, and send a WhatsApp quote request</p>
-      </div>
-      <button id="viewCartBtn" class="ml-auto btn flex items-center gap-2">
-        <span>Cart</span>
-        <span id="cartCount" class="inline-flex items-center justify-center w-6 h-6 text-sm rounded-full bg-white text-[var(--ipec-blue)] font-semibold">0</span>
-      </button>
-    </div>
-  </header>
-
-  <!-- STICKY SEARCH (narrower with max-w-4xl) -->
-  <div id="searchSticky" class="sticky-search">
-    <div class="max-w-4xl mx-auto px-3 md:px-4 py-2">
-      <div class="grid grid-cols-[1fr_auto] gap-2 md:gap-3 items-center">
-        <input id="searchBox"
-               class="w-full rounded-2xl border-2 accent-border px-4 md:px-5 search-xl outline-none focus:ring-4 focus:ring-[var(--ipec-blue)]/20 focus:border-[var(--ipec-blue)]"
-               placeholder="Type a code or any word from the description…" />
-        <button id="searchBtn" class="btn">Search</button>
-      </div>
-    </div>
+  <!-- CATEGORY BAR -->
+  <div class="category-bar-wrap">
+    <nav class="category-bar" role="navigation" aria-label="Categories">
+      <a class="cat-chip active" href="#all">All</a>
+      <a class="cat-chip" href="#cooking">Cooking</a>
+      <a class="cat-chip" href="#refrigeration">Refrigeration</a>
+      <a class="cat-chip" href="#prep">Preparation</a>
+      <a class="cat-chip" href="#display">Display</a>
+    </nav>
   </div>
 
-  <!-- CATEGORY BAR (sticky, hides on down / shows on up) -->
-  <div id="catSticky" class="cat-sticky">
-    <div id="catBar" class="max-w-6xl mx-auto px-3 md:px-4 cat-bar"></div>
-  </div>
+  <!-- CONTENT -->
+  <main id="content">
+    <section class="grid" id="productGrid">
 
-  <main class="max-w-6xl mx-auto px-3 md:px-4 pt-2 md:pt-3 pb-6">
-    <div id="stats" class="mt-1 text-xs md:text-sm text-slate-600 flex items-center gap-2"></div>
+      <!-- CARD TEMPLATE (duplicate and replace with your real data) -->
+      <article class="card" data-cat="cooking">
+        <!-- Wrap IMAGE with the SPEC SHEET LINK -->
+        <a class="thumb spec-link" href="https://example.com/specs/TKF-OVN90.pdf" target="_blank" rel="noopener">
+          <img src="https://via.placeholder.com/800x600?text=OVN90" alt="Convection Oven OVN90" loading="lazy">
+        </a>
+        <div class="meta">
+          <div>
+            <div class="title">Convection Oven</div>
+            <div class="code">TKF-OVN90</div>
+          </div>
+          <a class="btn" href="https://example.com/specs/TKF-OVN90.pdf" target="_blank" rel="noopener" aria-label="Open specification sheet">Spec Sheet</a>
+        </div>
+      </article>
 
-    <section id="emptyState" class="text-center text-slate-500 mt-6 md:mt-8">
-      <p class="text-base md:text-lg">Loading catalog…</p>
+      <article class="card" data-cat="refrigeration">
+        <a class="thumb spec-link" href="https://example.com/specs/TKSA-TTR15080D.pdf" target="_blank" rel="noopener">
+          <img src="https://via.placeholder.com/800x600?text=TTR15080D" alt="Static Cooling Cabinet TKSA-TTR15080D" loading="lazy">
+        </a>
+        <div class="meta">
+          <div>
+            <div class="title">Static Cooling Cabinet</div>
+            <div class="code">TKSA-TTR15080D</div>
+          </div>
+          <a class="btn" href="https://example.com/specs/TKSA-TTR15080D.pdf" target="_blank" rel="noopener">Spec Sheet</a>
+        </div>
+      </article>
+
+      <article class="card" data-cat="prep">
+        <a class="thumb spec-link" href="https://example.com/specs/TKF-MIX20.pdf" target="_blank" rel="noopener">
+          <img src="https://via.placeholder.com/800x600?text=MIX20" alt="Planetary Mixer MIX20" loading="lazy">
+        </a>
+        <div class="meta">
+          <div>
+            <div class="title">Planetary Mixer</div>
+            <div class="code">TKF-MIX20</div>
+          </div>
+          <a class="btn" href="https://example.com/specs/TKF-MIX20.pdf" target="_blank" rel="noopener">Spec Sheet</a>
+        </div>
+      </article>
+
+      <article class="card" data-cat="display">
+        <a class="thumb spec-link" href="https://example.com/specs/TKF-HOTDPL120.pdf" target="_blank" rel="noopener">
+          <img src="https://via.placeholder.com/800x600?text=HOTDPL120" alt="Hot Display 120" loading="lazy">
+        </a>
+        <div class="meta">
+          <div>
+            <div class="title">Hot Display</div>
+            <div class="code">TKF-HOTDPL120</div>
+          </div>
+          <a class="btn" href="https://example.com/specs/TKF-HOTDPL120.pdf" target="_blank" rel="noopener">Spec Sheet</a>
+        </div>
+      </article>
+
     </section>
-
-    <section id="results" class="grid gap-2.5 md:gap-3"></section>
   </main>
 
-  <!-- CART DRAWER -->
-  <aside id="cartDrawer" class="fixed top-0 right-0 w-full max-w-md h-full bg-white shadow-2xl border-l border-slate-200 translate-x-full transition-transform duration-300 z-50 flex flex-col">
-    <div class="p-4 border-b border-slate-200 flex items-center">
-      <h2 class="text-lg font-semibold">Your Cart</h2>
-      <button id="closeCartBtn" class="ml-auto text-slate-500 hover:text-slate-700">Close</button>
-    </div>
-    <div id="cartItems" class="p-4 flex-1 overflow-auto space-y-3"></div>
-    <div class="p-4 border-t border-slate-200 space-y-3">
-      <input id="buyerName" class="w-full rounded-lg border px-3 py-2" placeholder="Your name / company (optional)" />
-      <textarea id="buyerNote" class="w-full rounded-lg border px-3 py-2" placeholder="Notes (optional)" rows="2"></textarea>
-      <button id="sendWhatsApp" class="btn w-full">Send quote request via WhatsApp</button>
-      <button id="clearCart" class="w-full rounded-lg border px-3 py-2 text-slate-700">Clear cart</button>
-    </div>
-  </aside>
+  <script>
+    (function () {
+      // ----- Category Bar hide/show (mobile-safe) -----
+      const bar = document.querySelector('.category-bar');
+      let lastY = window.scrollY || 0;
+      let ticking = false;
+      const THRESHOLD = 2; // avoid jitter from iOS URL bar collapse/expand
 
-  <footer class="mt-10 md:mt-12 py-6 text-center text-slate-500 text-sm">
-    <p>© <span id="year"></span> IPEC — Product Catalog</p>
-  </footer>
+      function onScrollFrame() {
+        const y = window.scrollY || 0;
+        const dy = y - lastY;
 
-<script>
-(() => {
-  // ===== CONFIG =====
-  const CSV_URL  = "/api/catalog";                 // Netlify Function
-  const MANIFEST_URL = "/assets/manifest.json";    // code -> image file
-  const ORDER_URL    = "/assets/flyer-order.json"; // optional fixed order
-  const IMG_BASE     = "/images/";
-  const WHATSAPP_NUMBER = "96170389000";
+        if (Math.abs(dy) > THRESHOLD) {
+          if (dy > 0) {
+            // Scrolling DOWN -> hide
+            bar.classList.add('is-hidden');
+          } else {
+            // Scrolling UP -> show IMMEDIATELY
+            bar.classList.remove('is-hidden');
+          }
+          lastY = y;
+        }
+        ticking = false;
+      }
 
-  const CATEGORY_ORDER = [
-    "refrigeration equipment",
-    "hot equipment",
-    "preparation equipment",
-    "stainless steel equipment",
-    "shelving units",
-    "fun food",
-    "faucets",
-    "spare parts",
-    "ipec fabrication"
-  ];
+      function onScroll() {
+        if (!ticking) {
+          ticking = true;
+          requestAnimationFrame(onScrollFrame);
+        }
+      }
 
-  // ===== DOM =====
-  const $ = s => document.querySelector(s);
-  const results = $("#results"), emptyState = $("#emptyState"), stats = $("#stats");
-  const searchBox = $("#searchBox"), searchBtn = $("#searchBtn");
-  const catBar = $("#catBar"), catSticky = $("#catSticky");
-  const cartDrawer = $("#cartDrawer"), viewCartBtn = $("#viewCartBtn"), closeCartBtn = $("#closeCartBtn");
-  const cartItems = $("#cartItems"), cartCount = $("#cartCount");
-  const buyerName = $("#buyerName"), buyerNote = $("#buyerNote"), sendWhatsApp = $("#sendWhatsApp"), clearCart = $("#clearCart");
-  const siteHeader = $("#siteHeader"), searchSticky = $("#searchSticky");
-  $("#year").textContent = new Date().getFullYear();
+      window.addEventListener('scroll', onScroll, { passive: true });
 
-  // ===== STATE =====
-  let manifest = {};
-  let flyerOrder = [];
-  let rows = [];
-  let currentList = [];
-  let categories = [];
-  let selectedCategory = "All";
-  const cart = new Map();
+      // iOS Safari: visual viewport changes can happen without window scroll
+      if (window.visualViewport) {
+        visualViewport.addEventListener('scroll', onScroll, { passive: true });
+        visualViewport.addEventListener('resize', onScroll, { passive: true });
+      }
 
-  // ===== HELPERS =====
-  function nrm(s){ return (s||"").toString().normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase(); }
-  const stripEA = s => (s||"").toString().replace(/^\s*EA-\s*/i,"");
-  const isSmallEquipment = s => nrm(s).includes("small equipment");
+      // ----- Category filtering (optional; keep if you use the chips) -----
+      const grid = document.getElementById('productGrid');
+      const chips = document.querySelectorAll('.cat-chip');
 
-  function setStickyOffsets(){
-    const hHdr = siteHeader? Math.round(siteHeader.getBoundingClientRect().height) : 60;
-    const hSrch = searchSticky? Math.round(searchSticky.getBoundingClientRect().height) : 56;
-    document.documentElement.style.setProperty("--hdr-top", hHdr + "px");
-    document.documentElement.style.setProperty("--search-h", hSrch + "px");
-  }
-  window.addEventListener("load", setStickyOffsets, { once:true });
-  window.addEventListener("resize", setStickyOffsets);
-  window.addEventListener("orientationchange", setStickyOffsets);
-  window.addEventListener("scroll", () => { setStickyOffsets(); }, { passive:true });
+      function setActiveChip(el) {
+        chips.forEach(c => c.classList.toggle('active', c === el));
+      }
+      function filterByHash(hash) {
+        const cat = (hash || '#all').replace('#', '');
+        setActiveChip([...chips].find(c => c.getAttribute('href') === '#' + cat) || chips[0]);
+        const cards = grid.querySelectorAll('.card');
+        cards.forEach(card => {
+          const ok = (cat === 'all') || (card.dataset.cat === cat);
+          card.style.display = ok ? '' : 'none';
+        });
+      }
+      window.addEventListener('hashchange', () => filterByHash(location.hash));
+      filterByHash(location.hash);
 
-  function placeholder(){ return 'data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="84" height="84"><rect width="84" height="84" rx="12" fill="#f1f5f9"/></svg>'); }
-  function fileFromManifest(code){
-    const clean = nrm(stripEA(code)).trim();
-    const compact = clean.replace(/[^a-z0-9]/g,'');
-    return manifest[clean] || manifest[compact] || null;
-  }
-  function assignImage(img, code){ const f=fileFromManifest(code); img.src=f?(IMG_BASE+f):placeholder(); img.loading="lazy"; img.decoding="async"; }
+      // ----- Tap reliability for image links -----
+      // Ensure no global preventDefault on touchstart blocks navigation
+      document.addEventListener('touchstart', function(e){ /* passive: true */ }, { passive: true });
 
-  function orderBySubcategory(list){
-    return list.slice().sort((a,b) => {
-      const as=a.subKey||"zzz", bs=b.subKey||"zzz";
-      if (as!==bs) return as.localeCompare(bs);
-      return a.code.localeCompare(b.code);
-    });
-  }
-  function orderByFlyer(list){
-    if (!flyerOrder.length) return list;
-    const idx = new Map(flyerOrder.map((c,i)=>[nrm(stripEA(c)), i]));
-    return list.slice().sort((a,b)=>(idx.get(nrm(stripEA(a.code))) ?? 1e9)-(idx.get(nrm(stripEA(b.code))) ?? 1e9));
-  }
+      // If any ancestor has click handlers, stop them from canceling link navigation
+      document.querySelectorAll('a.spec-link').forEach(a => {
+        a.addEventListener('click', function(ev) {
+          // Let the anchor do its default thing. Avoid JS navigation to prevent iOS quirks.
+          // If you previously used ev.preventDefault() somewhere, remove it.
+        }, { passive: true });
+      });
 
-  // ===== CARD =====
-  function buildCard(r){
-    const card = document.createElement("div");
-    card.className = "bg-white rounded-2xl p-3 shadow-sm border border-slate-200";
-
-    const rowTop = document.createElement("div");
-    rowTop.className = "flex items-start gap-3";
-
-    // Clickable image -> same spec sheet
-    const imgEl = document.createElement("img");
-    imgEl.className = "thumb md:w-[110px] md:h-[110px]";
-    imgEl.alt = r.code;
-    assignImage(imgEl, r.code);
-
-    let leftNode = imgEl;
-    if (r.link){
-      const a = document.createElement("a");
-      a.href = r.link; a.target = "_blank"; a.rel="noopener";
-      a.className = "img-link";
-      a.appendChild(imgEl);
-      a.addEventListener("click", e => e.stopPropagation());
-      leftNode = a;
-    }
-
-    const textCol = document.createElement("div"); textCol.className="min-w-0 flex-1";
-    const line = document.createElement("div"); line.className="flex items-center gap-2 flex-wrap";
-    const code = document.createElement("div"); code.className="font-mono font-semibold text-slate-800 text-sm md:text-base"; code.textContent=r.code;
-    line.appendChild(code);
-    if (r.link){
-      const chip = document.createElement("a");
-      chip.href=r.link; chip.target="_blank"; chip.rel="noopener";
-      chip.className="btn-pill"; chip.textContent="Specification sheet";
-      line.appendChild(chip);
-    }
-    const desc = document.createElement("div"); desc.className="text-slate-700 mt-1 text-[13.5px] leading-[1.3] md:text-[15px] md:leading-[1.45]";
-    desc.textContent = r.desc || "";
-
-    textCol.append(line, desc);
-    rowTop.append(leftNode, textCol);
-
-    const controls = document.createElement("div");
-    controls.className = "mt-2 flex justify-end items-center gap-2";
-    const minus = Object.assign(document.createElement("button"), {textContent:"−"}); minus.className="w-9 h-9 rounded-lg border";
-    const qty = document.createElement("input"); qty.type="number"; qty.min="1"; qty.value="1"; qty.className="w-16 text-center rounded-lg border py-2";
-    const plus = Object.assign(document.createElement("button"), {textContent:"+"}); plus.className="w-9 h-9 rounded-lg border";
-    const add  = Object.assign(document.createElement("button"), {textContent:"Add"}); add.className="btn rounded-xl";
-
-    minus.onclick = () => { const v = Math.max(1,(+qty.value||1)-1); qty.value=v; };
-    plus.onclick  = () => { qty.value = (+qty.value||1)+1; };
-    add.onclick   = () => {
-      const q = Math.max(1, +qty.value||1);
-      const key = r.code;
-      const cur = cart.get(key) || { code:r.code, desc:r.desc, link:r.link, qty:0 };
-      cur.qty += q; cart.set(key, cur); updateCartBadge();
-    };
-
-    controls.append(minus, qty, plus, add);
-    card.append(rowTop, controls);
-    return card;
-  }
-
-  // ===== RENDER =====
-  function renderCategories(){
-    catBar.innerHTML = "";
-    const makeBtn = (label) => {
-      const b = document.createElement("button");
-      b.className = "cat-pill" + (label === selectedCategory ? " active" : "");
-      b.textContent = label;
-      b.onclick = () => { selectedCategory = label; doSearch(); highlightCats(); };
-      return b;
-    };
-    catBar.appendChild(makeBtn("All"));
-    categories.forEach(cat => catBar.appendChild(makeBtn(cat)));
-  }
-  function highlightCats(){
-    catBar.querySelectorAll(".cat-pill").forEach(b=>{
-      if (b.textContent === selectedCategory) b.classList.add("active");
-      else b.classList.remove("active");
-    });
-  }
-
-  async function renderChunked(list){
-    results.innerHTML=""; emptyState.innerHTML="";
-    const isMobile = matchMedia("(max-width: 640px)").matches;
-    const BATCH = isMobile ? 12 : 24;
-    let i=0;
-    while(i<list.length){
-      const frag=document.createDocumentFragment();
-      for(let j=0;j<BATCH && i<list.length; j++,i++) frag.appendChild(buildCard(list[i]));
-      results.appendChild(frag);
-      await new Promise(r=>requestAnimationFrame(r));
-    }
-  }
-
-  function doSearch(){
-    const q = nrm(stripEA((searchBox.value||"").trim()));
-    let list = rows.filter(r => {
-      const okQ = !q || r.codeKey.includes(q) || q.split(/\s+/).filter(Boolean).every(t => r.descriptionKey.includes(t));
-      const okC = selectedCategory === "All" || r.cat === selectedCategory;
-      return okQ && okC;
-    });
-
-    list = (selectedCategory !== "All") ? orderBySubcategory(list) : orderByFlyer(list);
-
-    currentList = list;
-    stats.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">${rows.length} items</span>`;
-    renderChunked(currentList);
-  }
-
-  // ===== CART =====
-  function renderCart(){
-    cartItems.innerHTML="";
-    if(!cart.size){ cartItems.innerHTML=`<p class="text-slate-500">Your cart is empty.</p>`; return; }
-    for(const item of cart.values()){
-      const row=document.createElement("div"); row.className="border rounded-xl p-3 flex items-start gap-3";
-      const img=document.createElement("img"); img.className="w-16 h-16 object-contain bg-slate-50 rounded"; assignImage(img,item.code);
-      const info=document.createElement("div"); info.className="min-w-0 flex-1";
-      info.innerHTML=`<div class="font-mono font-semibold">${item.code}</div>
-        <div class="text-sm text-slate-600 truncate">${item.desc||""}</div>
-        ${item.link?`<a class="text-sm text-[var(--ipec-blue-2)] underline" href="${item.link}" target="_blank" rel="noopener">Specification sheet</a>`:""}`;
-      const ctl=document.createElement("div"); ctl.className="flex items-center gap-2";
-      const m=Object.assign(document.createElement("button"),{textContent:"−"}); m.className="w-8 h-8 rounded border";
-      const q=document.createElement("input"); q.type="number"; q.min="1"; q.value=item.qty; q.className="w-14 text-center rounded border py-1";
-      const p=Object.assign(document.createElement("button"),{textContent:"+"}); p.className="w-8 h-8 rounded border";
-      const rm=Object.assign(document.createElement("button"),{textContent:"Remove"}); rm.className="text-sm text-red-600";
-      m.onclick=()=>{ item.qty=Math.max(1,(+q.value||1)-1); q.value=item.qty; updateCartBadge(); };
-      p.onclick=()=>{ item.qty=(+q.value||1)+1; q.value=item.qty; updateCartBadge(); };
-      q.onchange=()=>{ item.qty=Math.max(1,(+q.value||1)); updateCartBadge(); };
-      rm.onclick=()=>{ cart.delete(item.code); updateCartBadge(); };
-      ctl.append(m,q,p,rm); row.append(img,info,ctl); cartItems.appendChild(row);
-    }
-  }
-  function updateCartBadge(){ let t=0; cart.forEach(i=>t+=i.qty); cartCount.textContent=t; renderCart(); }
-
-  // ===== DATA LOAD =====
-  async function loadJSONCached(url, key, ttl){
-    try { const r = sessionStorage.getItem(key); if (r){ const o = JSON.parse(r); if (Date.now()-o.t < ttl) return o.v; } } catch {}
-    const v = await fetch(url).then(r=>r.json());
-    try { sessionStorage.setItem(key, JSON.stringify({t:Date.now(), v})); } catch {}
-    return v;
-  }
-
-  (async () => {
-    try {
-      const [mani, order] = await Promise.all([
-        loadJSONCached(MANIFEST_URL, "ipec_manifest", 24*60*60*1000).catch(()=> ({})),
-        loadJSONCached(ORDER_URL,    "ipec_order",    24*60*60*1000).catch(()=> [])
-      ]);
-      manifest = mani; flyerOrder = order;
-
-      const data = await loadJSONCached(CSV_URL, "ipec_catalog", 15*60*1000);
-
-      rows = (data||[])
-        .filter(d => d && d.code && !isSmallEquipment(d.cat||""))
-        .map(d => ({
-          code: d.code,
-          desc: d.desc || "",
-          link: d.link || null,
-          cat:  (d.cat || "").trim(),
-          sub:  d.sub || "",
-          codeKey: nrm(stripEA(d.code||"")),
-          descriptionKey: nrm(d.desc||""),
-          subKey: nrm(d.sub||"")
-        }));
-
-      // Categories in fixed order, using real names from sheet
-      const byNorm = new Map();
-      rows.forEach(r => { if (r.cat){ const k=nrm(r.cat); if(!byNorm.has(k)) byNorm.set(k, r.cat); } });
-      categories = CATEGORY_ORDER.map(name => byNorm.get(nrm(name))).filter(Boolean);
-
-      renderCategories();
-
-      currentList = flyerOrder.length ? (function(){
-        const idx = new Map(flyerOrder.map((c,i)=>[nrm(stripEA(c)), i]));
-        return rows.slice().sort((a,b)=>(idx.get(nrm(stripEA(a.code))) ?? 1e9)-(idx.get(nrm(stripEA(b.code))) ?? 1e9));
-      })() : rows.slice();
-
-      stats.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs">${rows.length} items</span>`;
-      await renderChunked(currentList);
-      emptyState.innerHTML = `<p class="text-base md:text-lg">Type a code or a word from the description…</p>`;
-
-      // warm cache again
-      fetch(CSV_URL).then(r=>r.json()).then(j=>{ try{ sessionStorage.setItem("ipec_catalog", JSON.stringify({t:Date.now(), v:j})); }catch{} });
-    } catch(e){
-      console.error(e);
-      emptyState.innerHTML = `<p class="text-base md:text-lg text-red-600">Failed to load catalog: ${e.message}</p>`;
-    }
-  })();
-
-  // ===== EVENTS =====
-  viewCartBtn.addEventListener("click", ()=>{ cartDrawer.style.transform="translateX(0)"; });
-  closeCartBtn.addEventListener("click", ()=>{ cartDrawer.style.transform="translateX(100%)"; });
-  sendWhatsApp.addEventListener("click", ()=> {
-    if(!cart.size){ cartDrawer.style.transform="translateX(0)"; return; }
-    const items = Array.from(cart.values()).map(i=>`• ${i.code} — qty ${i.qty}`).join("%0A");
-    const name  = buyerName.value ? `%0AName: ${encodeURIComponent(buyerName.value)}` : "";
-    const note  = buyerNote.value ? `%0ANote: ${encodeURIComponent(buyerNote.value)}` : "";
-    const text  = `Hello IPEC,%0AI'd like a quote for:%0A${items}${name}${note}`;
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${text}`, "_blank");
-  });
-  clearCart.addEventListener("click", ()=>{ cart.clear(); updateCartBadge(); });
-  searchBtn.addEventListener("click", doSearch);
-  searchBox.addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
-
-  // ===== SMART SHOW/HIDE FOR CATEGORY BAR =====
-  let lastY = window.scrollY;
-  const TH = 8; // small threshold in px to avoid flicker
-  function onSmartScroll(){
-    const y = window.scrollY || 0;
-    if (y > lastY + TH) {               // scrolling down -> hide
-      catSticky.classList.add("cat-hide");
-    } else if (y < lastY - TH) {        // scrolling up a bit -> show immediately
-      catSticky.classList.remove("cat-hide");
-    }
-    lastY = y;
-  }
-  // Start hidden once you scroll past the category bar initial position
-  window.addEventListener("scroll", onSmartScroll, { passive:true });
-})();
-</script>
+      // ----- (Optional) Cache-bust helper: append ?v=2 to assets if needed -----
+      // Example usage if you dynamically inject images/specs; here we’re static.
+    })();
+  </script>
 </body>
 </html>
